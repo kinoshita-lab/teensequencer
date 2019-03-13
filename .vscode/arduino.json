@@ -1,0 +1,5 @@
+{
+    "board": "arduino:avr:micro",
+    "sketch": "bbb_teensy.ino",
+    "port": "/dev/ttyACM0"
+}
