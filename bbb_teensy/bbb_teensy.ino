@@ -119,13 +119,23 @@ struct Bpm
     float bpm;    
     uint32_t count;
     uint32_t countMax;
-    Bpm() : bpm(120.0), count(0), countMax(0xFFFFFFFF) {}
+    uint8_t posIn16th;
+    Bpm() : bpm(120.0), count(0), countMax(0xFFFFFFFF), posIn16th(0){}
 
     auto tick1ms() -> void {
         count++;
 
         if (count >= countMax) {
             count = 0;
+            posIn16th++;
+
+            if (posIn16th >= 4) {
+                posIn16th = 0;
+            }
+
+            const auto beatLedStatus = posIn16th == 0 ? HIGH : LOW;
+            digitalWrite(LED_PIN, beatLedStatus);
+
             sequencer.nextStep();
 
             // dasai
@@ -148,10 +158,8 @@ struct Bpm
         }
 
         if (count <= countMax / 2) {
-            digitalWrite(LED_PIN, HIGH);
             digitalWrite(EXTERNAL_SYNC_OUT, HIGH);
         } else {
-            digitalWrite(LED_PIN, LOW);
             digitalWrite(EXTERNAL_SYNC_OUT, LOW);
         }
     };
@@ -187,7 +195,7 @@ auto setup() -> void {
     drum1.secondMix(1.0);
     drum1.pitchMod(0.53);
     waveshaper.shape(WAVESHAPE_EXAMPLE, 17);
-    drum_amp.gain(2.0);
+    drum_amp.gain(1.0);
 
     snareCrush.bits(16);
     snareCrush.sampleRate(44100);
