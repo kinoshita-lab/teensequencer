@@ -38,8 +38,13 @@ class Sequencer
 
 public:
     Sequencer() {
-        clear();
+        for (auto&& parts : recordedData) {
+            for (auto&& step : parts) {
+                step.clear();
+            }
+        }
     }
+
     virtual ~Sequencer() {}
 
     auto nextStep() -> void {
@@ -50,11 +55,9 @@ public:
         }
     }
 
-    auto clear() -> void {
-        for (auto&& part : recordedData) {
-            for (auto&& step : part) {
+    auto clear(const auto partIndex) -> void {
+        for (auto&& step : recordedData[partIndex]) {
                 step.clear();
-            }
         }
     }
 

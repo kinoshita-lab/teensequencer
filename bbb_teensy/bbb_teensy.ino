@@ -42,6 +42,7 @@ AudioFilterStateVariable filter;
 AudioMixer4 delayFeedbackMixer;
 AudioEffectDelay masterDelay;
 AudioAmplifier delay_feedback_amp;
+//AudioEffectReverb reverb;
 
 AudioConnection          patchCord10(drum1, 0, waveshaper, 0);
 AudioConnection          patchCord11(waveshaper, 0, drum_amp, 0);
@@ -64,6 +65,7 @@ AudioConnection          patchCord51(delayFeedbackMixer, 0, masterDelay, 0);
 AudioConnection          patchCord52(masterDelay, 0, delay_feedback_amp, 0);
 AudioConnection          patchCord53(delay_feedback_amp, 0, delayFeedbackMixer, 1);
 AudioConnection          patchCord54(delayFeedbackMixer, 0, filter, 0);
+
 
 AudioConnection          patchCord60(filter, 0, dacs1, 0);
 AudioConnection          patchCord61(filter, 0, dacs1, 1);
@@ -165,7 +167,7 @@ auto changeBpm(const auto newBpm) -> void {
 	bpm.countMax = (uint32_t)tmp;
 
     // compute delay time for 3/8th
-    auto delayTime = bpm.countMax * 2 * 3; // [ms];
+    auto delayTime = bpm.countMax * 2 * 2.98; // [ms];
     masterDelay.delay(0, delayTime);
 }
 
@@ -312,7 +314,7 @@ auto loop() -> void {
     }
 
     if (sw5.fell()) {
-        sequencer.clear();
+        sequencer.clear(currentPart);
     }
 
     // update bpm
