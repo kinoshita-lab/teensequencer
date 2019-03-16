@@ -39,6 +39,10 @@ AudioMixer4              mixer1;
 
 AudioFilterStateVariable filter;
 
+AudioMixer4 delayFeedbackMixer;
+AudioEffectDelay masterDelay;
+AudioAmplifier delay_feedback_amp;
+
 AudioConnection          patchCord10(drum1, 0, waveshaper, 0);
 AudioConnection          patchCord11(waveshaper, 0, drum_amp, 0);
 AudioConnection          patchCord12(drum_amp, 0, bdMixer, 0);
@@ -55,7 +59,11 @@ AudioConnection          pathCord40(playMem2, 0, chCrush, 0);
 AudioConnection          pathCord41(chCrush, 0, mixer1, 3);
 
 
-AudioConnection          patchCord50(mixer1, 0, filter, 0);
+AudioConnection          patchCord50(mixer1, 0, delayFeedbackMixer, 0);
+AudioConnection          patchCord51(delayFeedbackMixer, 0, masterDelay, 0);
+AudioConnection          patchCord52(masterDelay, 0, delay_feedback_amp, 0);
+AudioConnection          patchCord53(delay_feedback_amp, 0, delayFeedbackMixer, 1);
+AudioConnection          patchCord54(delayFeedbackMixer, 0, filter, 0);
 
 AudioConnection          patchCord60(filter, 0, dacs1, 0);
 AudioConnection          patchCord61(filter, 0, dacs1, 1);
@@ -155,6 +163,10 @@ auto changeBpm(const auto newBpm) -> void {
 	auto tmp = 60 * 1000.0 / newBpm;
 	tmp /= 4.0;
 	bpm.countMax = (uint32_t)tmp;
+
+    // compute delay time for 3/8th
+    auto delayTime = bpm.countMax * 2 * 3; // [ms];
+    masterDelay.delay(0, delayTime);
 }
 
 auto setup() -> void {
@@ -183,6 +195,8 @@ auto setup() -> void {
     noise1_envelope.decay(100);
     noise1_envelope.sustain(0);
 
+    delay_feedback_amp.gain(0.0);
+
     filter.resonance(1.2);
 
     sw1.attach(SW_1_PIN);
@@ -208,7 +222,7 @@ auto setup() -> void {
 
     Serial.begin(115200);
     Serial.println("Hello World");
-    AudioMemory(15);
+    AudioMemory(800);
 
     AudioNoInterrupts();
 
@@ -249,7 +263,10 @@ auto partTweak2(const auto parameter2) -> void {
         case 1: // snare
         snareCrush.sampleRate(map(parameter2, 0, 127, 1000, 44100));
         break;
-        case 2: // noise
+        case 2: {// noise
+        const float gain = parameter2 / (127.0 * 2);
+        noise1.amplitude(gain);
+        }
         break;
         case 3: // ch
         chCrush.sampleRate(map(parameter2, 0, 127, 1000, 44100));
@@ -299,7 +316,7 @@ auto loop() -> void {
     }
 
     // update bpm
-    const auto bpmAdValue = analogRead(0) >> 2 << 2;
+    const auto bpmAdValue = analogRead(0) >> 4 << 4;
     const auto mappedValue = map(bpmAdValue, 0, 1023, 200, 3000);
 
     if (mappedBpm != mappedValue) {
@@ -325,7 +342,16 @@ auto loop() -> void {
         lastParam2 = param2;
     }
 
-    const auto filterValue = analogRead(3) >> 2 << 2;
+    // effects
+
+    // delay
+    const auto delayValue = analogRead(3) >> 2 << 2;
+    const auto mappedDelayValue = map(delayValue, 0, 1023, 0, 10000);
+    const auto floatDelayValue = mappedDelayValue / 10000.0;
+    delay_feedback_amp.gain(floatDelayValue);
+
+    // filter
+    const auto filterValue = analogRead(4) >> 2 << 2;
     const auto mappedFilterValue = map(filterValue, 0, 1023, 0, 10000);
     const auto floatFilterValue = mappedFilterValue / 10000.0;
     const auto squaredFilterValue = floatFilterValue * floatFilterValue;
