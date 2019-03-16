@@ -7,34 +7,58 @@
 
 #include "AudioSampleSnare.h"
 #include "AudioSampleCh.h"
+#include "AudioSampleBd01.h"
 
 #include "Sequencer.h"
 
 #include "MsTimer2.h"
 
 // GUItool: begin automatically generated code
-AudioSynthWaveformSine   sine1;          //xy=333,282
-AudioSynthWaveformSine   sine2;          //xy=346,361
+
 AudioOutputAnalogStereo  dacs1;          //xy=659,282
+
+
 AudioSynthSimpleDrum drum1;
-AudioSynthSimpleDrum drum2;
+AudioPlayMemory bd909;
+AudioMixer4 bdMixer;
+AudioAmplifier drum_amp;
+
+AudioEffectWaveshaper waveshaper;
+
 AudioPlayMemory playMem1;
+AudioEffectBitcrusher snareCrush;
+
 AudioPlayMemory playMem2;
+AudioEffectBitcrusher chCrush;
+
 AudioSynthNoiseWhite noise1;
 AudioEffectEnvelope noise1_envelope;
 
+
 AudioMixer4              mixer1;
 
-AudioConnection          patchCord1(drum1, 0, mixer1, 0);
-AudioConnection          patchCord2(playMem1, 0, mixer1, 1);
+AudioFilterStateVariable filter;
 
-AudioConnection          pathCord3(noise1, noise1_envelope);
-AudioConnection          pathCord4(noise1_envelope, 0, mixer1, 2);
+AudioConnection          patchCord10(drum1, 0, waveshaper, 0);
+AudioConnection          patchCord11(waveshaper, 0, drum_amp, 0);
+AudioConnection          patchCord12(drum_amp, 0, bdMixer, 0);
+AudioConnection          patchCord13(bd909, 0, bdMixer, 1);
+AudioConnection          patchCord14(bdMixer, 0, mixer1, 0);
 
-AudioConnection          pathCord5(playMem2, 0, mixer1, 3);
+AudioConnection          patchCord20(playMem1, 0, snareCrush, 0);
+AudioConnection          patchCord21(snareCrush, 0, mixer1, 1);
 
-AudioConnection          patchCord5(mixer1, 0, dacs1, 0);
-AudioConnection          patchCord6(mixer1, 0, dacs1, 1);
+AudioConnection          pathCord30(noise1, noise1_envelope);
+AudioConnection          pathCord31(noise1_envelope, 0, mixer1, 2);
+
+AudioConnection          pathCord40(playMem2, 0, chCrush, 0);
+AudioConnection          pathCord41(chCrush, 0, mixer1, 3);
+
+
+AudioConnection          patchCord50(mixer1, 0, filter, 0);
+
+AudioConnection          patchCord60(filter, 0, dacs1, 0);
+AudioConnection          patchCord61(filter, 0, dacs1, 1);
 
 
 //AudioConnection          patchCord2(sine2, 0, dacs1, 1);
@@ -55,8 +79,30 @@ Bounce sw3 = Bounce();
 Bounce sw4 = Bounce();
 Bounce sw5 = Bounce();
 
+float WAVESHAPE_EXAMPLE[17] = {
+  -0.588,
+  -0.579,
+  -0.549,
+  -0.488,
+  -0.396,
+  -0.320,
+  -0.228,
+  -0.122,
+  0,
+  0.122,
+  0.228,
+  0.320,
+  0.396,
+  0.488,
+  0.549,
+  0.579,
+  0.588
+};
+
 
 bbb::Sequencer sequencer;
+
+int currentPart;
 
 struct Bpm
 {
@@ -75,6 +121,7 @@ struct Bpm
             // dasai
             if (sequencer.noteOnStep(0)) {
                 drum1.noteOn();
+                bd909.play(AudioSampleBd01);
             }
 
             if (sequencer.noteOnStep(1)) {
@@ -122,11 +169,21 @@ auto setup() -> void {
     drum1.length(1500);
     drum1.secondMix(1.0);
     drum1.pitchMod(0.53);
+    waveshaper.shape(WAVESHAPE_EXAMPLE, 17);
+    drum_amp.gain(3.0);
 
-    noise1.amplitude(0.1);
+    snareCrush.bits(16);
+    snareCrush.sampleRate(44100);
+
+    chCrush.bits(16);
+    chCrush.sampleRate(44100);    
+
+    noise1.amplitude(0.5);
     noise1_envelope.attack(1);
     noise1_envelope.decay(100);
     noise1_envelope.sustain(0);
+
+    filter.resonance(1.2);
 
     sw1.attach(SW_1_PIN);
     sw1.interval(10);
@@ -160,6 +217,49 @@ auto setup() -> void {
 
 auto mappedBpm = 1200;
 
+
+auto partTweak1(const auto parameter1) -> void {
+    switch (currentPart) {
+        case 0: // kick
+        drum1.frequency(parameter1);
+        break;
+        case 1: // snare
+        snareCrush.bits(map(parameter1, 0, 127, 1, 16));
+        break;
+        case 2: // noise
+        noise1_envelope.decay(map(parameter1, 0, 127, 10, 500));
+        break;
+        case 3: // ch
+        chCrush.bits(map(parameter1, 0, 127, 1, 16));
+        break;
+        default: 
+        break;
+    }
+}
+
+auto partTweak2(const auto parameter2) -> void {
+
+    switch (currentPart) {
+        case 0: {// kick 
+            const int offsetRemoved = parameter2 - 64;
+            const float tweakValue = 0.5 + (offsetRemoved / (127.0 * 10));
+            drum1.pitchMod(tweakValue);
+            break;
+        }
+        case 1: // snare
+        snareCrush.sampleRate(map(parameter2, 0, 127, 1000, 44100));
+        break;
+        case 2: // noise
+        break;
+        case 3: // ch
+        chCrush.sampleRate(map(parameter2, 0, 127, 1000, 44100));
+        break;
+    }
+}
+
+auto lastParam1 = 0;
+auto lastParam2 = 0;
+
 auto loop() -> void {
     // update switches
     sw1.update();
@@ -170,23 +270,28 @@ auto loop() -> void {
 
     if (sw1.fell()) {
         drum1.noteOn();
+        bd909.play(AudioSampleBd01);
         sequencer.rec(0);
+        currentPart = 0;
     }
 
     if (sw2.fell()) {
         //drum2.noteOn();
         playMem1.play(AudioSampleSnare);
         sequencer.rec(1);
+        currentPart = 1;
     }
 
     if (sw3.fell()) {
         noise1_envelope.noteOn();
         sequencer.rec(2);
+        currentPart = 2;
     }
 
     if (sw4.fell()) {
         playMem2.play(AudioSampleCh);
         sequencer.rec(3);
+        currentPart = 3;
     }
 
     if (sw5.fell()) {
@@ -201,4 +306,29 @@ auto loop() -> void {
         mappedBpm = mappedValue;
         changeBpm(mappedValue / 10.0);
     }
+
+    // update params
+    // for part tweaking
+    const auto param1 = analogRead(1) >> 3;
+    const auto param2 = analogRead(2) >> 3;
+
+    const int delta1 = abs(lastParam1 - param1);
+    const int delta2 = abs(lastParam2 - param2);
+
+    if (delta1 >= 2) {
+        partTweak1(param1);
+        lastParam1 = param1;
+    }
+
+    if (delta2 >= 2) {
+        partTweak2(param2);
+        lastParam2 = param2;
+    }
+
+    const auto filterValue = analogRead(3) >> 2 << 2;
+    const auto mappedFilterValue = map(filterValue, 0, 1023, 0, 10000);
+    const auto floatFilterValue = mappedFilterValue / 10000.0;
+    const auto squaredFilterValue = floatFilterValue * floatFilterValue;
+    const auto actualFilterFrequency = map(squaredFilterValue, 0.0, 1.0, 50, 15000);
+    filter.frequency(actualFilterFrequency);
 }

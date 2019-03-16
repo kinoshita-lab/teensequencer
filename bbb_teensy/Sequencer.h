@@ -48,9 +48,6 @@ public:
         if (step >= 16) {
             step = 0;
         }
-
-        Serial.print("Seq: step = ");
-        Serial.println(step);
     }
 
     auto clear() -> void {
@@ -66,7 +63,6 @@ public:
     }
 
     auto noteOnStep(const int index) -> bool {
-        Serial.println(recordedData[index][step].note);
         return recordedData[index][step].note != RecordData::SEQ_NONE;
     }
 
