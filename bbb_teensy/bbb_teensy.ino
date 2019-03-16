@@ -184,7 +184,7 @@ auto setup() -> void {
     drum1.secondMix(1.0);
     drum1.pitchMod(0.53);
     waveshaper.shape(WAVESHAPE_EXAMPLE, 17);
-    drum_amp.gain(3.0);
+    drum_amp.gain(2.0);
 
     snareCrush.bits(16);
     snareCrush.sampleRate(44100);
@@ -222,9 +222,7 @@ auto setup() -> void {
 
     changeBpm(120.0);
 
-    Serial.begin(115200);
-    Serial.println("Hello World");
-    AudioMemory(800);
+    AudioMemory(900);
 
     AudioNoInterrupts();
 
