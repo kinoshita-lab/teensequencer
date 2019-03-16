@@ -81,7 +81,7 @@ constexpr int SW_2_PIN = 3;
 constexpr int SW_3_PIN = 4;
 constexpr int SW_4_PIN = 5;
 constexpr int SW_5_PIN = 6;
-
+constexpr int EXTERNAL_SYNC_OUT = 33;
 
 Bounce sw1 = Bounce();
 Bounce sw2 = Bounce();
@@ -149,8 +149,10 @@ struct Bpm
 
         if (count <= countMax / 2) {
             digitalWrite(LED_PIN, HIGH);
+            digitalWrite(EXTERNAL_SYNC_OUT, HIGH);
         } else {
             digitalWrite(LED_PIN, LOW);
+            digitalWrite(EXTERNAL_SYNC_OUT, LOW);
         }
     };
 };
@@ -173,6 +175,7 @@ auto changeBpm(const auto newBpm) -> void {
 
 auto setup() -> void {
     pinMode(LED_PIN, OUTPUT);
+    pinMode(EXTERNAL_SYNC_OUT, OUTPUT);
     pinMode(SW_1_PIN, INPUT_PULLUP);
     pinMode(SW_2_PIN, INPUT_PULLUP);
     pinMode(SW_3_PIN, INPUT_PULLUP);
