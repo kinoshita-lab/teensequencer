@@ -36,6 +36,7 @@ AudioEffectEnvelope noise1_envelope;
 
 
 AudioMixer4              mixer1;
+AudioAmplifier mixer1_out_amp;
 
 AudioFilterStateVariable filter;
 
@@ -59,8 +60,10 @@ AudioConnection          pathCord31(noise1_envelope, 0, mixer1, 2);
 AudioConnection          pathCord40(playMem2, 0, chCrush, 0);
 AudioConnection          pathCord41(chCrush, 0, mixer1, 3);
 
+AudioConnection          patchCord42(mixer1, 0, mixer1_out_amp, 0);
 
-AudioConnection          patchCord50(mixer1, 0, delayFeedbackMixer, 0);
+
+AudioConnection          patchCord50(mixer1_out_amp, 0, delayFeedbackMixer, 0);
 AudioConnection          patchCord51(delayFeedbackMixer, 0, masterDelay, 0);
 AudioConnection          patchCord52(masterDelay, 0, delay_feedback_amp, 0);
 AudioConnection          patchCord53(delay_feedback_amp, 0, delayFeedbackMixer, 1);
@@ -81,6 +84,8 @@ constexpr int SW_2_PIN = 3;
 constexpr int SW_3_PIN = 4;
 constexpr int SW_4_PIN = 5;
 constexpr int SW_5_PIN = 6;
+constexpr int SW_6_PIN = 7;
+
 constexpr int EXTERNAL_SYNC_OUT = 33;
 
 Bounce sw1 = Bounce();
@@ -88,6 +93,7 @@ Bounce sw2 = Bounce();
 Bounce sw3 = Bounce();
 Bounce sw4 = Bounce();
 Bounce sw5 = Bounce();
+Bounce sw6 = Bounce();
 
 float WAVESHAPE_EXAMPLE[17] = {
   -0.588,
@@ -120,13 +126,20 @@ struct Bpm
     uint32_t count;
     uint32_t countMax;
     uint8_t posIn16th;
+    bool tickOperation;
     Bpm() : bpm(120.0), count(0), countMax(0xFFFFFFFF), posIn16th(0){}
 
     auto tick1ms() -> void {
+        tickOperation = false;
         count++;
+
+        if (count >= 13) {
+            digitalWrite(EXTERNAL_SYNC_OUT, LOW);
+        }
 
         if (count >= countMax) {
             count = 0;
+            digitalWrite(EXTERNAL_SYNC_OUT, HIGH);
             posIn16th++;
 
             if (posIn16th >= 4) {
@@ -156,19 +169,13 @@ struct Bpm
                  playMem2.play(AudioSampleCh);
             }
         }
-
-        if (count <= countMax / 2) {
-            digitalWrite(EXTERNAL_SYNC_OUT, HIGH);
-        } else {
-            digitalWrite(EXTERNAL_SYNC_OUT, LOW);
-        }
     };
 };
 
 Bpm bpm;
 
 auto timer2Interrupt() -> void {
-    bpm.tick1ms();
+    bpm.tickOperation = true;
 }
 
 auto changeBpm(const auto newBpm) -> void {
@@ -177,7 +184,7 @@ auto changeBpm(const auto newBpm) -> void {
 	bpm.countMax = (uint32_t)tmp;
 
     // compute delay time for 3/8th
-    auto delayTime = bpm.countMax * 2 * 2.98; // [ms];
+    auto delayTime = bpm.countMax * 2 * 3.02; // [ms];
     masterDelay.delay(0, delayTime);
 }
 
@@ -189,13 +196,14 @@ auto setup() -> void {
     pinMode(SW_3_PIN, INPUT_PULLUP);
     pinMode(SW_4_PIN, INPUT_PULLUP);
     pinMode(SW_5_PIN, INPUT_PULLUP);
+    pinMode(SW_6_PIN, INPUT_PULLUP);
 
     drum1.frequency(60);
-    drum1.length(1500);
-    drum1.secondMix(1.0);
+    drum1.length(3000);
+    drum1.secondMix(0.2);
     drum1.pitchMod(0.53);
     waveshaper.shape(WAVESHAPE_EXAMPLE, 17);
-    drum_amp.gain(1.0);
+    drum_amp.gain(0.5);
 
     snareCrush.bits(16);
     snareCrush.sampleRate(44100);
@@ -203,10 +211,12 @@ auto setup() -> void {
     chCrush.bits(16);
     chCrush.sampleRate(44100);    
 
-    noise1.amplitude(0.5);
+    noise1.amplitude(0.2);
     noise1_envelope.attack(1);
     noise1_envelope.decay(100);
     noise1_envelope.sustain(0);
+
+    mixer1_out_amp.gain(0.5);
 
     delay_feedback_amp.gain(0.0);
 
@@ -227,15 +237,20 @@ auto setup() -> void {
     sw5.attach(SW_5_PIN);
     sw5.interval(10);
 
+    sw6.attach(SW_6_PIN);
+    sw6.interval(10);
+
 
     MsTimer2::set(1, timer2Interrupt);
     MsTimer2::start();
 
     changeBpm(120.0);
 
-    AudioMemory(900);
+    AudioMemory(800);
 
     AudioNoInterrupts();
+
+    Serial.begin(115200);
 
     AudioInterrupts();
 }
@@ -287,6 +302,7 @@ auto partTweak2(const auto parameter2) -> void {
 
 auto lastParam1 = 0;
 auto lastParam2 = 0;
+bool muteMode = false;
 
 auto loop() -> void {
     // update switches
@@ -295,35 +311,61 @@ auto loop() -> void {
     sw3.update();
     sw4.update();
     sw5.update();
+    sw6.update();
 
     if (sw1.fell()) {
-        drum1.noteOn();
-        bd909.play(AudioSampleBd01);
-        sequencer.rec(0);
         currentPart = 0;
+        if (muteMode) {
+            sequencer.toggleMute(0);            
+        } else {
+            drum1.noteOn();
+            bd909.play(AudioSampleBd01);
+            sequencer.rec(0, (float)bpm.count / bpm.countMax);
+        }
     }
 
     if (sw2.fell()) {
-        //drum2.noteOn();
-        playMem1.play(AudioSampleSnare);
-        sequencer.rec(1);
         currentPart = 1;
+        if (muteMode) {
+            sequencer.toggleMute(1);
+        } else {
+            playMem1.play(AudioSampleSnare);
+            sequencer.rec(1, (float)bpm.count / bpm.countMax);
+        }
     }
 
     if (sw3.fell()) {
-        noise1_envelope.noteOn();
-        sequencer.rec(2);
         currentPart = 2;
+        if (muteMode) {
+            sequencer.toggleMute(2);
+        } else {
+            noise1_envelope.noteOn();
+            sequencer.rec(2, (float)bpm.count / bpm.countMax);
+        }
     }
 
     if (sw4.fell()) {
-        playMem2.play(AudioSampleCh);
-        sequencer.rec(3);
         currentPart = 3;
+        if (muteMode) {
+            sequencer.toggleMute(3);
+        } else {
+            playMem2.play(AudioSampleCh);
+            sequencer.rec(3, (float)bpm.count / bpm.countMax);
+        }
     }
 
     if (sw5.fell()) {
+        Serial.println("Hoge");
         sequencer.clear(currentPart);
+    }
+
+    if (sw6.fell()) {
+        muteMode = true;
+        Serial.println("mute on");
+    }
+    if (sw6.rose()) {
+        muteMode = false;
+        Serial.println("mute off");
     }
 
     // update bpm
@@ -368,4 +410,8 @@ auto loop() -> void {
     const auto squaredFilterValue = floatFilterValue * floatFilterValue;
     const auto actualFilterFrequency = map(squaredFilterValue, 0.0, 1.0, 50, 15000);
     filter.frequency(actualFilterFrequency);
+
+    if (bpm.tickOperation) {
+        bpm.tick1ms();
+    }
 }

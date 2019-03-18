@@ -43,6 +43,14 @@ public:
                 step.clear();
             }
         }
+
+        auto& kick = recordedData[0];
+        kick[0].note = kick[4].note = kick[8].note = kick[12].note = 1;
+    
+
+        for (auto&& m: muteState) {
+            m = false;
+        }
     }
 
     virtual ~Sequencer() {}
@@ -61,12 +69,24 @@ public:
         }
     }
 
-    auto rec(const auto index) {
-        recordedData[index][step].note = RecordData::NOTE_ON;
+    auto rec(const auto index, const auto countRatio) -> void  {
+        auto quantizedStep = countRatio > 0.5 ? step + 1 : step;
+        quantizedStep = quantizedStep > 16 ? 0 : quantizedStep;
+
+        recordedData[index][quantizedStep].note = RecordData::NOTE_ON;
     }
 
-    auto noteOnStep(const int index) -> bool {
+    auto noteOnStep(const int index) -> bool {        
+        const auto& stepData = recordedData[index][step];
+        if (muteState[index]) {
+            return false;
+        }
+
         return recordedData[index][step].note != RecordData::SEQ_NONE;
+    }
+
+    auto toggleMute(const int index) -> void {
+        muteState[index] = !muteState[index];
     }
 
 
@@ -74,6 +94,7 @@ public:
 private:
     uint8_t step; // 0 - 15
     RecordData recordedData[NUM_INSTRUMENT][NUM_STEP];
+    bool muteState[NUM_INSTRUMENT];
 };
 
 };
